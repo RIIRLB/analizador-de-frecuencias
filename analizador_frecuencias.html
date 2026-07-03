@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Analizador de Frecuencias</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #000;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    min-height: 100dvh;
+    padding: 1.2rem;
+    overflow-x: hidden;
+  }
+
+  h1 {
+    font-size: 13px;
+    font-weight: 400;
+    color: #555;
+    text-align: center;
+    margin-bottom: 1.2rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+  }
+
+  .note-block {}
+  .note-label { font-size: 11px; color: #444; margin-bottom: 2px; }
+  .note-main {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+  #note-name {
+    font-size: 56px;
+    font-weight: 300;
+    color: #fff;
+    line-height: 1;
+    letter-spacing: -2px;
+  }
+  #octave-num {
+    font-size: 22px;
+    color: #555;
+    font-weight: 300;
+  }
+  #freq-display {
+    font-size: 12px;
+    color: #444;
+    margin-top: 3px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tune-block { text-align: right; }
+  .tune-label { font-size: 11px; color: #444; margin-bottom: 2px; }
+  #cents-display {
+    font-size: 22px;
+    font-weight: 300;
+    color: #fff;
+    font-variant-numeric: tabular-nums;
+    transition: color 0.15s;
+  }
+  .tune-track {
+    width: 110px;
+    height: 4px;
+    background: #1a1a1a;
+    border-radius: 2px;
+    margin-top: 8px;
+    margin-left: auto;
+    position: relative;
+  }
+  .tune-center {
+    position: absolute;
+    left: 50%;
+    top: -2px;
+    width: 1px;
+    height: 8px;
+    background: #333;
+  }
+  #tune-bar {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    width: 4px;
+    border-radius: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    transition: left 0.1s, background 0.15s;
+    background: #2a78d6;
+  }
+
+  .start-wrap {
+    text-align: center;
+    margin-bottom: 1rem;
+  }
+  #start-btn {
+    background: transparent;
+    border: 1px solid #333;
+    color: #ccc;
+    padding: 10px 28px;
+    font-size: 15px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #start-btn:active { opacity: 0.7; }
+  #start-btn.active { border-color: #2a78d6; color: #2a78d6; }
+  .mic-hint { font-size: 11px; color: #333; margin-top: 6px; }
+
+  .canvas-wrap {
+    position: relative;
+    width: 100%;
+    height: 200px;
+    background: #0a0a0a;
+    border: 1px solid #1a1a1a;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 6px;
+  }
+  #spectrum { width: 100%; height: 100%; display: block; }
+  #harmonic-labels {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+  }
+
+  .x-axis {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: #333;
+    margin-bottom: 1rem;
+    padding: 0 2px;
+  }
+
+  .harmonics-label {
+    font-size: 11px;
+    color: #444;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  #harmonics-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-height: 32px;
+  }
+  .h-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #0f0f0f;
+    border: 1px solid #222;
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+  .h-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .h-label { color: #555; }
+  .h-note { font-weight: 500; color: #ddd; }
+  .h-freq { color: #444; font-variant-numeric: tabular-nums; }
+  .waiting { font-size: 12px; color: #333; font-style: italic; }
+</style>
+</head>
+<body>
+
+<h1>Analizador de frecuencias</h1>
+
+<div class="top-row">
+  <div class="note-block">
+    <div class="note-label">nota detectada</div>
+    <div class="note-main">
+      <span id="note-name">—</span>
+      <span id="octave-num">—</span>
+    </div>
+    <div id="freq-display">— Hz</div>
+  </div>
+  <div class="tune-block">
+    <div class="tune-label">afinación</div>
+    <div id="cents-display">± 0 ¢</div>
+    <div class="tune-track">
+      <div class="tune-center"></div>
+      <div id="tune-bar"></div>
+    </div>
+  </div>
+</div>
+
+<div class="start-wrap">
+  <button id="start-btn" onclick="toggleAudio()">🎙 activar micrófono</button>
+  <div class="mic-hint">el audio no sale de tu dispositivo</div>
+</div>
+
+<div class="canvas-wrap">
+  <canvas id="spectrum"></canvas>
+  <div id="harmonic-labels"></div>
+</div>
+
+<div class="x-axis">
+  <span>0 Hz</span>
+  <span>1000 Hz</span>
+  <span>2000 Hz</span>
+  <span>3000 Hz</span>
+  <span>4000 Hz</span>
+</div>
+
+<div class="harmonics-label">armónicos detectados</div>
+<div id="harmonics-row">
+  <span class="waiting">esperando señal…</span>
+</div>
+
+<script>
+const NOTE_NAMES = ['Do','Do#','Re','Re#','Mi','Fa','Fa#','Sol','Sol#','La','La#','Si'];
+const COLORS = ['#2a78d6','#1baf7a','#eda100','#e34948','#4a3aa7','#eb6834','#e87ba4','#008a00'];
+const MAX_FREQ = 4000;
+
+let audioCtx, analyser, animId, isRunning = false;
+
+function freqToNote(freq) {
+  if (freq <= 0) return null;
+  const semitones = 12 * Math.log2(freq / 440);
+  const rounded = Math.round(semitones);
+  const idx = ((rounded % 12) + 12 + 9) % 12;
+  const octave = Math.floor((rounded + 9) / 12) + 4;
+  const cents = Math.round((semitones - rounded) * 100);
+  return { name: NOTE_NAMES[idx], octave, cents };
+}
+
+function noteLabel(freq) {
+  const n = freqToNote(freq);
+  return n ? n.name + n.octave : '?';
+}
+
+async function toggleAudio() {
+  if (isRunning) { stopAudio(); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }, video: false });
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 8192;
+    analyser.smoothingTimeConstant = 0.82;
+    audioCtx.createMediaStreamSource(stream).connect(analyser);
+    isRunning = true;
+    const btn = document.getElementById('start-btn');
+    btn.textContent = '⏹ detener';
+    btn.classList.add('active');
+    draw();
+  } catch(e) {
+    alert('No se pudo acceder al micrófono.\nVerifica los permisos en tu navegador.');
+  }
+}
+
+function stopAudio() {
+  if (animId) cancelAnimationFrame(animId);
+  if (audioCtx) audioCtx.close();
+  isRunning = false;
+  const btn = document.getElementById('start-btn');
+  btn.textContent = '🎙 activar micrófono';
+  btn.classList.remove('active');
+  reset();
+}
+
+function reset() {
+  document.getElementById('note-name').textContent = '—';
+  document.getElementById('octave-num').textContent = '—';
+  document.getElementById('freq-display').textContent = '— Hz';
+  document.getElementById('cents-display').textContent = '± 0 ¢';
+  document.getElementById('cents-display').style.color = '#fff';
+  document.getElementById('tune-bar').style.left = '50%';
+  document.getElementById('tune-bar').style.background = '#2a78d6';
+  document.getElementById('harmonics-row').innerHTML = '<span class="waiting">esperando señal…</span>';
+  document.getElementById('harmonic-labels').innerHTML = '';
+}
+
+function findFundamental(data, sampleRate, fftSize) {
+  const nyquist = sampleRate / 2;
+  const res = nyquist / (fftSize / 2);
+  const minBin = Math.floor(40 / res);
+  const maxBin = Math.floor(1200 / res);
+  let maxVal = -Infinity, maxBin_ = -1;
+  for (let i = minBin; i < maxBin; i++) {
+    if (data[i] > maxVal) { maxVal = data[i]; maxBin_ = i; }
+  }
+  if (maxVal < 90) return null;
+  let ws = 0, wt = 0;
+  for (let i = Math.max(0, maxBin_ - 3); i <= Math.min(data.length - 1, maxBin_ + 3); i++) {
+    ws += i * data[i]; wt += data[i];
+  }
+  return { freq: (wt > 0 ? ws / wt : maxBin_) * res, amplitude: maxVal };
+}
+
+function draw() {
+  animId = requestAnimationFrame(draw);
+  const bufLen = analyser.frequencyBinCount;
+  const data = new Uint8Array(bufLen);
+  analyser.getByteFrequencyData(data);
+
+  const canvas = document.getElementById('spectrum');
+  const W = canvas.parentElement.clientWidth;
+  const H = canvas.parentElement.clientHeight;
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  const sampleRate = audioCtx.sampleRate;
+  const res = (sampleRate / 2) / bufLen;
+  const maxBin = Math.floor(MAX_FREQ / res);
+
+  [1000, 2000, 3000].forEach(f => {
+    const x = (f / MAX_FREQ) * W;
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+  });
+  [25, 50, 75].forEach(p => {
+    const y = H * (1 - p / 100);
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  });
+
+  ctx.beginPath();
+  for (let i = 0; i <= maxBin; i++) {
+    const x = (i / maxBin) * W;
+    const y = H - (data[i] / 255) * H * 0.93;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = '#2a78d6';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath();
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, 'rgba(42,120,214,0.45)');
+  grad.addColorStop(1, 'rgba(42,120,214,0.02)');
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  document.getElementById('harmonic-labels').innerHTML = '';
+  const labelsEl = document.getElementById('harmonic-labels');
+
+  const fund = findFundamental(data, sampleRate, analyser.fftSize);
+
+  if (fund) {
+    const f0 = fund.freq;
+    const note = freqToNote(f0);
+
+    document.getElementById('note-name').textContent = note ? note.name : '?';
+    document.getElementById('octave-num').textContent = note ? note.octave : '';
+    document.getElementById('freq-display').textContent = f0.toFixed(1) + ' Hz';
+
+    if (note) {
+      const c = note.cents;
+      const sign = c >= 0 ? '+' : '';
+      document.getElementById('cents-display').textContent = sign + c + ' ¢';
+      const col = Math.abs(c) < 10 ? '#1baf7a' : Math.abs(c) < 25 ? '#eda100' : '#e34948';
+      document.getElementById('cents-display').style.color = col;
+      const pct = Math.max(5, Math.min(95, 50 + (c / 50) * 50));
+      document.getElementById('tune-bar').style.left = pct + '%';
+      document.getElementById('tune-bar').style.background = col;
+    }
+
+    const row = document.getElementById('harmonics-row');
+    row.innerHTML = '';
+
+    for (let r = 1; r <= 8; r++) {
+      const hf = f0 * r;
+      if (hf > MAX_FREQ * 1.05) break;
+
+      const hBin = Math.round(hf / res);
+      let peak = 0;
+      for (let k = Math.max(0, hBin - 4); k <= Math.min(bufLen - 1, hBin + 4); k++) {
+        if (data[k] > peak) peak = data[k];
+      }
+
+      const color = COLORS[(r - 1) % COLORS.length];
+      const x = Math.floor((hf / MAX_FREQ) * W);
+      const barH = (peak / 255) * H * 0.93;
+      const y = H - barH;
+      const label = r === 1 ? 'f₀' : r + 'f₀';
+      const hn = noteLabel(hf);
+
+      ctx.beginPath();
+      ctx.moveTo(x, H); ctx.lineTo(x, Math.max(0, y));
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([3, 3]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      if (x >= 0 && x <= W) {
+        const pill = document.createElement('div');
+        const pillLeft = Math.min(x, W - 72);
+        const pillTop = Math.max(4, y - 26);
+        pill.style.cssText = `
+          position:absolute;
+          left:${pillLeft}px;
+          top:${pillTop}px;
+          background:${color};
+          color:#000;
+          font-size:10px;
+          font-weight:600;
+          padding:2px 5px;
+          border-radius:4px;
+          white-space:nowrap;
+          line-height:1.5;
+          opacity:0.92;
+        `;
+        pill.textContent = `${label} ${hn} ${Math.round(hf)}Hz`;
+        labelsEl.appendChild(pill);
+      }
+
+      const chip = document.createElement('div');
+      chip.className = 'h-chip';
+      chip.innerHTML = `
+        <span class="h-dot" style="background:${color}"></span>
+        <span class="h-label">${label}</span>
+        <span class="h-note">${hn}</span>
+        <span class="h-freq">${Math.round(hf)} Hz</span>
+      `;
+      row.appendChild(chip);
+    }
+
+  } else {
+    reset();
+  }
+}
+</script>
+</body>
+</html>
